@@ -19,6 +19,7 @@ class SimCLR_Model(nn.Module):
             nn.Linear(resnet.fc.in_features, projection_dim)
         )
 
+
     def forward(self, x):
         h = self.encoder(x).squeeze() 
         z = self.projector(h)         
@@ -26,7 +27,6 @@ class SimCLR_Model(nn.Module):
 
 ##############################################################################################
 ##############################################################################################
-
 import torch
 import torch.nn as nn
 
@@ -39,14 +39,23 @@ class LinearEvaluationModel(nn.Module):
             param.requires_grad = False
 
         self.encoder = simclr_model.encoder  
-        self.classifier = nn.Linear(512, num_classes)  
+
+        # Larger classifier head
+        self.classifier = nn.Sequential(
+            nn.Linear(512, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, num_classes)
+        )
 
     def forward(self, x):
         with torch.no_grad():
             h = self.encoder(x).squeeze()  
         logits = self.classifier(h)       
         return logits
-
 
 ##############################################################################################
 ##############################################################################################
