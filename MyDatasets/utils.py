@@ -12,8 +12,12 @@ class SimCLRTransform:
                 transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)
             ], p=0.8),
             transforms.RandomGrayscale(p=0.2),
-            transforms.GaussianBlur(kernel_size=3)
+            transforms.GaussianBlur(kernel_size=3),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                std=[0.2023, 0.1994, 0.2010])
         ])
+
 
     def __call__(self, x):
         return self.transform(x), self.transform(x)
