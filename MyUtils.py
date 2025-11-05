@@ -115,6 +115,21 @@ def save_tensor_image(image_tensor, folder='Plots', filename='image.png'):
 
 ##############################################################################################
 ##############################################################################################
+ 
+def save_simclr_model(model, path="saved_models/simclr_model.pth"):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(model.state_dict(), path)
+    print(f"SimCLR model saved to {path}")
+
+
+def load_simclr_model(model, path="saved_models/simclr_model.pth", device='cuda'):
+    model.load_state_dict(torch.load(path, map_location=device))
+    print(f"SimCLR model loaded from {path}")
+    return model
+
+
+##############################################################################################
+##############################################################################################
 
 def Train_SimCLR(model, data_loader, optimizer, scheduler, loss_fn, batch_size, epochs, device, debug=False):
     model.to(device)
@@ -155,64 +170,18 @@ def Train_SimCLR(model, data_loader, optimizer, scheduler, loss_fn, batch_size, 
     
     return epoch_loss
 
-
 ##############################################################################################
 ##############################################################################################
-
-def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, loss_fn, device, epochs):
-    model.train()
-    epoch_loss = []
-    for epoch in range(epochs):
-        total_loss = 0
-        correct = 0
-        total = 0
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = loss_fn(outputs, labels)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-            _, predicted = outputs.max(1)
-            correct += predicted.eq(labels).sum().item()
-            total += labels.size(0)
-
-        scheduler.step()
-        acc = 100. * correct / total
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss:.4f}, Accuracy: {acc:.2f}%")
-
-    # Evaluation
-    model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            _, predicted = outputs.max(1)
-            correct += predicted.eq(labels).sum().item()
-            total += labels.size(0)
-    print(f"Test Accuracy: {100. * correct / total:.2f}%")
-
-
-##############################################################################################
-##############################################################################################
-
-
 def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, loss_fn, device, epochs):
     epoch_loss = []
-    Acc_train = []
-    Acc_test = []
+    epoch_acc = []
+    epoch_test_acc = []
 
     for epoch in range(epochs):
         model.train()
-        total_loss = 0
-        correct = 0
-        total = 0
-
+        batch_loss = []
+        correct_train = 0
+        total_train = 0
         for batch in train_loader:
             images = batch['image'].to(device)
             labels = batch['label'].to(device)
@@ -224,15 +193,18 @@ def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, l
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
+            batch_loss.append(float(loss))
+
             _, predicted = outputs.max(1)
-            correct += predicted.eq(labels).sum().item()
-            total += labels.size(0)
+            correct_train += predicted.eq(labels).sum().item()
+            total_train += labels.size(0)
 
         scheduler.step()
-        train_acc = 100. * correct / total
-        epoch_loss.append(total_loss)
-        Acc_train.append(train_acc)
+
+        avg_loss = np.mean(batch_loss)
+        train_acc = 100. * correct_train / total_train
+        epoch_loss.append(avg_loss)
+        epoch_acc.append(train_acc)
 
         # Evaluation
         model.eval()
@@ -249,12 +221,11 @@ def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, l
                 total_test += labels.size(0)
 
         test_acc = 100. * correct_test / total_test
-        Acc_test.append(test_acc)
+        epoch_test_acc.append(test_acc)
 
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss:.4f}, Train Acc: {train_acc:.2f}%, Test Acc: {test_acc:.2f}%")
+        print(f"Epoch {epoch+1}/{epochs}, Avg Loss: {avg_loss:.4f}, Train Acc: {train_acc:.2f}%, Test Acc: {test_acc:.2f}%")
 
-    return epoch_loss, Acc_train, Acc_test
-
+    return epoch_loss, epoch_acc, epoch_test_acc
 
 ##############################################################################################
 ##############################################################################################
