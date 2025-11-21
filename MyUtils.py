@@ -27,7 +27,7 @@ import torch
 import torch.nn.functional as F
 
 class NTXentLoss(torch.nn.Module):
-    def __init__(self, batch_size, temperature=0.5, device='cuda'):
+    def __init__(self, batch_size, temperature, device='cuda'):
         super(NTXentLoss, self).__init__()
         self.batch_size = batch_size
         self.temperature = temperature
@@ -121,12 +121,110 @@ def save_simclr_model(model, path="saved_models/simclr_model.pth"):
     torch.save(model.state_dict(), path)
     print(f"SimCLR model saved to {path}")
 
+##############################################################################################
+##############################################################################################
 
 def load_simclr_model(model, path="saved_models/simclr_model.pth", device='cuda'):
     model.load_state_dict(torch.load(path, map_location=device))
     print(f"SimCLR model loaded from {path}")
     return model
 
+##############################################################################################
+##############################################################################################
+
+import torch
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import os
+from torch.utils.data import DataLoader
+
+
+def visualize_tsne(model, dataset, device, save_path="saved_models/tsne_visualization.png", batch_size=256):
+    # Ensure dataset is in torch format
+    dataset.set_format("torch", columns=["image", "label"])
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+    model.eval()
+    model.to(device)
+
+    embeddings = []
+    labels = []
+
+    # Extract embeddings
+    with torch.no_grad():
+        for batch in data_loader:
+            images, lbls = batch["image"].to(device), batch["label"]
+            emb = model(images)  
+            embeddings.append(emb.cpu())
+            labels.append(lbls)
+
+    embeddings = torch.cat(embeddings, dim=0).numpy()
+    labels = torch.cat(labels, dim=0).numpy()
+
+    # Apply t-SNE
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+    embeddings_2d = tsne.fit_transform(embeddings)
+
+    # Plot
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], c=labels, cmap="tab10", alpha=0.6)
+    plt.colorbar(scatter, ticks=range(len(set(labels))))
+    plt.title("t-SNE Visualization of Test Embeddings")
+
+    # Save plot
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+
+    print(f"t-SNE visualization saved at {save_path}")
+
+##############################################################################################
+##############################################################################################
+
+
+import torch
+from torch.utils.data import DataLoader
+from sklearn.manifold import TSNE
+import pandas as pd
+import plotly.express as px
+import os
+
+def visualize_tsne_3d_interactive(model, dataset, device, save_path="saved_models/tsne_3d.html", batch_size=256):
+    # Ensure dataset is in torch format
+    dataset.set_format("torch", columns=["image", "label"])
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+    model.eval()
+    model.to(device)
+
+    embeddings, labels = [], []
+
+    with torch.no_grad():
+        for batch in data_loader:
+            images, lbls = batch["image"].to(device), batch["label"]
+            emb = model(images)  # Use forward if it returns features
+            embeddings.append(emb.cpu())
+            labels.append(lbls)
+
+    embeddings = torch.cat(embeddings).numpy()
+    labels = torch.cat(labels).numpy()
+
+    # Apply t-SNE for 3D
+    tsne = TSNE(n_components=3, random_state=42, perplexity=30)
+    embeddings_3d = tsne.fit_transform(embeddings)
+
+    # Create DataFrame for Plotly
+    df = pd.DataFrame(embeddings_3d, columns=["x", "y", "z"])
+    df["label"] = labels
+
+    # Plot interactive 3D scatter
+    fig = px.scatter_3d(df, x="x", y="y", z="z", color="label", title="Interactive 3D t-SNE Visualization")
+    
+    # Save as HTML
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.write_html(save_path)
+
+    print(f"Interactive 3D t-SNE visualization saved at {save_path}. Open this file in your browser to rotate and zoom.")
 
 ##############################################################################################
 ##############################################################################################
@@ -172,6 +270,7 @@ def Train_SimCLR(model, data_loader, optimizer, scheduler, loss_fn, batch_size, 
 
 ##############################################################################################
 ##############################################################################################
+
 def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, loss_fn, device, epochs):
     epoch_loss = []
     epoch_acc = []
