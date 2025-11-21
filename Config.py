@@ -10,13 +10,15 @@ def get_args():
     parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu") # for runing on GPU
     #parser.add_argument('--device',default="mps" if torch.backends.mps.is_available() else "cpu") # for runing on mps MAC OS
 
-    parser.add_argument('--dataset',  type=str, default="cifar10")
-    parser.add_argument('--num_train_samples', type=int, default=10000)
-    parser.add_argument('--num_test_samples', type=int, default=9000)
+    parser.add_argument('--dataset',  type=str, default="cifar10") # "tiny_imagenet", "cifar10"
+    parser.add_argument('--backbone', type=str, default="resnet50") # resnet18 or resnet50
+    parser.add_argument('--num_train_samples', type=int, default= 50000)
+    parser.add_argument('--num_test_samples', type=int, default= 9000)
 
-    parser.add_argument('--batch_size', type=int, default=64)
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--batch_size_eval', type=int, default=64)
+    parser.add_argument('--batch_size', type=int, default=1024)
+    parser.add_argument('--temperature',type=float, default=0.5)
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--batch_size_eval', type=int, default=128)
     parser.add_argument('--epochs_eval', type=int, default=100)
 
 
