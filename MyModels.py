@@ -6,23 +6,36 @@ import torchvision.models as models
 ##############################################################################################
 ##############################################################################################
 
-class SimCLR_Model(nn.Module):
-    def __init__(self, projection_dim=128):
-        super(SimCLR_Model, self).__init__()
-        
-        resnet = models.resnet18(pretrained=False)
-        self.encoder = nn.Sequential(*list(resnet.children())[:-1])  
+import torch
+import torch.nn as nn
+import torchvision.models as models
 
+class SimCLR_Model(nn.Module):
+    def __init__(self, backbone_type, projection_dim=128):
+        super(SimCLR_Model, self).__init__()
+
+        # Select backbone
+        if backbone_type == "resnet18":
+            resnet = models.resnet18(pretrained=False)
+        elif backbone_type == "resnet50":
+            resnet = models.resnet50(pretrained=False)
+        else:
+            raise ValueError("Invalid backbone_type. Choose 'resnet18' or 'resnet50'.")
+
+        # Encoder: all layers except the final FC
+        self.encoder = nn.Sequential(*list(resnet.children())[:-1])
+
+        # Projection head
+        in_features = resnet.fc.in_features
         self.projector = nn.Sequential(
-            nn.Linear(resnet.fc.in_features, resnet.fc.in_features),
+            nn.Linear(in_features, in_features),
             nn.ReLU(),
-            nn.Linear(resnet.fc.in_features, projection_dim)
+            nn.Linear(in_features, projection_dim)
         )
 
-
     def forward(self, x):
-        h = self.encoder(x).squeeze() 
-        z = self.projector(h)         
+        h = self.encoder(x).squeeze()  # Feature representation
+        z = self.projector(h)          # Projection head output
         return h, z
 
 ##############################################################################################
@@ -40,9 +53,15 @@ class LinearEvaluationModel(nn.Module):
 
         self.encoder = simclr_model.encoder  
 
+
+        sample_input = torch.randn(1, 3, 224, 224) 
+        with torch.no_grad():
+            feature_dim = self.encoder(sample_input).squeeze().shape[-1]
+
+
         # Larger classifier head
         self.classifier = nn.Sequential(
-            nn.Linear(512, 1024),
+            nn.Linear(feature_dim, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(),
             nn.Linear(1024, 512),
