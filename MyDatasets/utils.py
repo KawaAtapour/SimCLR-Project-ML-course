@@ -29,6 +29,10 @@ class SimCLRTransform:
         elif "cifar" in dataset_name:
             mean = [0.4914, 0.4822, 0.4465]
             std = [0.2023, 0.1994, 0.2010]
+        elif "stl" in dataset_name:
+            mean = [0.485, 0.456, 0.406]
+            std = [0.229, 0.224, 0.225]
+
 
         self.transform = transforms.Compose([
             transforms.Resize(image_size),
