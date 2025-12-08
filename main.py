@@ -17,11 +17,31 @@ warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 from torchvision.models import resnet18, ResNet18_Weights
-model = resnet18(weights=None)  # or weights=ResNet18_Weights.DEFAULT
 import torch.optim as optim
 from pl_bolts.optimizers import LARS
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
+from torchvision import transforms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -30,7 +50,8 @@ from torch.utils.data import DataLoader
 
 dataset_loaders = {
     "cifar10": MyDatasets.load_cifar10,
-    "tiny_imagenet": MyDatasets.load_tiny_imagenet
+    "tiny_imagenet": MyDatasets.load_tiny_imagenet,
+    "stl10": MyDatasets.load_stl10
 }
 
 
@@ -65,11 +86,16 @@ if __name__ == "__main__":
         
         MyUtils.plot_and_save_losses(epoch_losses, name_plot="loss")
         MyUtils.save_simclr_model(model)
+    else:
+        model = MyModels.SimCLR_Model(backbone_type = args.backbone)
+        model = MyUtils.load_simclr_model(model, device=args.device)
+
+
 
 
     #MyUtils.visualize_tsne(model, base_dataset["train"], device='cuda', save_path='saved_models/tsne_cifar10.png')
     # MyUtils.visualize_tsne_3d_interactive(model, base_dataset["train"], device='cuda', save_path='saved_models/tsne_cifar10_3d.html')
-    #9/0
+    # 9/0
 
 
 
@@ -82,11 +108,19 @@ if __name__ == "__main__":
     # ==========================================================================================================================
     # ==========================================================================================================================
 
-    from torchvision import transforms
+    if "imagenet" in args.dataset:
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
+    elif "cifar" in args.dataset:
+        mean = [0.4914, 0.4822, 0.4465]
+        std = [0.2023, 0.1994, 0.2010]
+    elif "stl" in args.dataset:
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
 
     eval_transform = transforms.Compose([
-        transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                            std=[0.2023, 0.1994, 0.2010])])
+        transforms.Normalize(mean=mean,
+                            std=std)])
 
     base_dataset['train'] = base_dataset['train'].map(
         lambda batch: {'image': eval_transform(batch['image'])}
@@ -102,9 +136,6 @@ if __name__ == "__main__":
     train_loader = DataLoader(base_dataset['train'], batch_size=args.batch_size_eval, shuffle=True)
     test_loader = DataLoader(base_dataset['test'], batch_size=args.batch_size_eval, shuffle=False)
 
-    if args.saved_model:
-        model = MyModels.SimCLR_Model(backbone_type = args.backbone)
-        model = MyUtils.load_simclr_model(model, device=args.device)
 
     eval_model = MyModels.LinearEvaluationModel(model, num_classes).to(args.device)
     eval_optimizer = optim.SGD(eval_model.classifier.parameters(), lr=0.01, momentum=0.9)
@@ -118,13 +149,3 @@ if __name__ == "__main__":
     MyUtils.plot_and_save_losses(Acc_test, name_plot="Acc_test")
     MyUtils.plot_and_save_losses(Acc_train, name_plot="Acc_train")
     print(Acc_train, Acc_test)
-
-
-
-
-
-
-
-
-
-
