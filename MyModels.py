@@ -49,7 +49,7 @@ class LinearEvaluationModel(nn.Module):
         
         # Freeze encoder parameters
         for param in simclr_model.encoder.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
 
         self.encoder = simclr_model.encoder  
 
