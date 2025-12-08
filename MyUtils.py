@@ -69,6 +69,50 @@ class NTXentLoss(torch.nn.Module):
         return loss.mean()
 
 
+##############################################################################################
+##############################################################################################
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class InfoNCELoss(nn.Module):
+    def __init__(self, temperature=0.5):
+        super(InfoNCELoss, self).__init__()
+        self.temperature = temperature
+
+    def forward(self, query, keys):
+        # Normalize embeddings
+        query = F.normalize(query, dim=-1)
+        keys = F.normalize(keys, dim=-1)
+
+        # Compute similarity matrix
+        logits = torch.matmul(query, keys.T) / self.temperature
+
+        # Labels: positives are diagonal
+        labels = torch.arange(query.size(0), device=query.device)
+
+        # Cross-entropy over similarities
+        return F.cross_entropy(logits, labels)
+
+
+##############################################################################################
+##############################################################################################
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class BYOLLoss(nn.Module):
+    def forward(self, p, z):
+        # Normalize predictions and targets
+        p = F.normalize(p, dim=-1)
+        z = F.normalize(z.detach(), dim=-1)
+
+        # Cosine similarity loss
+        return 2 - 2 * (p * z).sum
+
 
 ##############################################################################################
 ##############################################################################################
@@ -124,9 +168,23 @@ def save_simclr_model(model, path="saved_models/simclr_model.pth"):
 ##############################################################################################
 ##############################################################################################
 
+# def load_simclr_model(model, path="saved_models/simclr_model.pth", device='cuda'):
+#     model.load_state_dict(torch.load(path, map_location=device))
+#     print(f"SimCLR model loaded from {path}")
+#     return model
+
+
+##############################################################################################
+##############################################################################################
+
 def load_simclr_model(model, path="saved_models/simclr_model.pth", device='cuda'):
-    model.load_state_dict(torch.load(path, map_location=device))
-    print(f"SimCLR model loaded from {path}")
+    state_dict = torch.load(path, map_location=device)
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k.startswith("backbone."):
+            new_k = k.replace("backbone.", "encoder.")
+            new_state_dict[new_k] = v
+    model.load_state_dict(new_state_dict, strict=False)
     return model
 
 ##############################################################################################
@@ -202,12 +260,14 @@ def visualize_tsne_3d_interactive(model, dataset, device, save_path="saved_model
     with torch.no_grad():
         for batch in data_loader:
             images, lbls = batch["image"].to(device), batch["label"]
-            emb = model(images)  # Use forward if it returns features
+        
+            emb, _ = model(images)
             embeddings.append(emb.cpu())
             labels.append(lbls)
 
     embeddings = torch.cat(embeddings).numpy()
     labels = torch.cat(labels).numpy()
+
 
     # Apply t-SNE for 3D
     tsne = TSNE(n_components=3, random_state=42, perplexity=30)
@@ -225,6 +285,8 @@ def visualize_tsne_3d_interactive(model, dataset, device, save_path="saved_model
     fig.write_html(save_path)
 
     print(f"Interactive 3D t-SNE visualization saved at {save_path}. Open this file in your browser to rotate and zoom.")
+
+
 
 ##############################################################################################
 ##############################################################################################
@@ -271,16 +333,18 @@ def Train_SimCLR(model, data_loader, optimizer, scheduler, loss_fn, batch_size, 
 ##############################################################################################
 ##############################################################################################
 
-def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, loss_fn, device, epochs):
+
+def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, loss_fn, device, epochs, k=5):
     epoch_loss = []
-    epoch_acc = []
-    epoch_test_acc = []
+    epoch_acc_topk = []
+    epoch_test_acc_topk = []
 
     for epoch in range(epochs):
         model.train()
         batch_loss = []
-        correct_train = 0
+        correct_train_topk = 0
         total_train = 0
+
         for batch in train_loader:
             images = batch['image'].to(device)
             labels = batch['label'].to(device)
@@ -294,20 +358,21 @@ def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, l
 
             batch_loss.append(float(loss))
 
-            _, predicted = outputs.max(1)
-            correct_train += predicted.eq(labels).sum().item()
+            # ✅ Compute Top-k accuracy for training
+            _, topk_preds = outputs.topk(k, dim=1)  # Get top-k predictions
+            correct_train_topk += (topk_preds.eq(labels.view(-1, 1)).sum().item())
             total_train += labels.size(0)
 
         scheduler.step()
 
         avg_loss = np.mean(batch_loss)
-        train_acc = 100. * correct_train / total_train
+        train_acc_topk = 100. * correct_train_topk / total_train
         epoch_loss.append(avg_loss)
-        epoch_acc.append(train_acc)
+        epoch_acc_topk.append(train_acc_topk)
 
-        # Evaluation
+        # ✅ Evaluation
         model.eval()
-        correct_test = 0
+        correct_test_topk = 0
         total_test = 0
         with torch.no_grad():
             for batch in test_loader:
@@ -315,16 +380,18 @@ def train_linear_model(model, train_loader, test_loader, optimizer, scheduler, l
                 labels = batch['label'].to(device)
 
                 outputs = model(images)
-                _, predicted = outputs.max(1)
-                correct_test += predicted.eq(labels).sum().item()
+                _, topk_preds = outputs.topk(k, dim=1)
+                correct_test_topk += (topk_preds.eq(labels.view(-1, 1)).sum().item())
                 total_test += labels.size(0)
 
-        test_acc = 100. * correct_test / total_test
-        epoch_test_acc.append(test_acc)
+        test_acc_topk = 100. * correct_test_topk / total_test
+        epoch_test_acc_topk.append(test_acc_topk)
 
-        print(f"Epoch {epoch+1}/{epochs}, Avg Loss: {avg_loss:.4f}, Train Acc: {train_acc:.2f}%, Test Acc: {test_acc:.2f}%")
+        print(f"Epoch {epoch+1}/{epochs}, Avg Loss: {avg_loss:.4f}, "
+              f"Train Top-{k} Acc: {train_acc_topk:.2f}%, Test Top-{k} Acc: {test_acc_topk:.2f}%")
 
-    return epoch_loss, epoch_acc, epoch_test_acc
+    return epoch_loss, epoch_acc_topk, epoch_test_acc_topk
+
 
 ##############################################################################################
 ##############################################################################################
